@@ -19,6 +19,8 @@ func main() {
 	for line := range lines {
 		fmt.Printf("read: %s\n", line)
 	}
+
+	file.Close()
 }
 
 func getLinesChannel(f io.ReadCloser) <-chan string {
