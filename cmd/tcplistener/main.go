@@ -1,10 +1,11 @@
 package main
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"strings"
 )
 
 func main() {
@@ -14,24 +15,20 @@ func main() {
 		fmt.Printf("error opening port: %v", err)
 	}
 
-	fmt.Printf("accepting connections on port: %s\n", port)
-
+	fmt.Printf("accepting connections on localhost%s\n", port)
 	for {
 		conn, err := listener.Accept()
-
 		if err != nil {
 			fmt.Printf("error accepting connection: %v\n", err)
 		}
-		
 		fmt.Printf("accepted a connection\n")
 
 		lines := getLinesChannel(conn)
 		for line := range lines {
-			fmt.Printf("%s", line)
+			fmt.Printf("%s\n", line)
 		}
 
-		fmt.Printf("\n")
-		fmt.Printf("closing connection...\n")
+		fmt.Printf("closing %v\n", conn.RemoteAddr())
 	}
 }
 
@@ -39,29 +36,31 @@ func getLinesChannel(c io.ReadCloser) <-chan string {
 	linesCh := make(chan string)
 
 	go func(){
+		defer c.Close()
 		defer close(linesCh)
 
 		currentLine := "" 
 		for {
 			buffer := make([]byte, 8)
-			_, err := c.Read(buffer)
-			if err == io.EOF {
-				break
-			}
-
-			parts := bytes.Split(buffer, []byte("\n"))
-
-			for i := range(len(parts)) {
-				if i != 0 {
+			n, err := c.Read(buffer)
+			if err != nil {
+				if currentLine != "" {
 					linesCh <- currentLine
-					currentLine = ""
 				}
-
-				currentLine += string(parts[i])
+				if errors.Is(err, io.EOF) {
+					break
+				}
 			}
-		}
 
-		linesCh <- currentLine
+			str := string(buffer[:n])
+			parts := strings.Split(str, "\n")
+			for i := range(len(parts) - 1) {
+				linesCh <- fmt.Sprintf("%s%s", currentLine, parts[i])
+				currentLine = "" 
+			}
+
+			currentLine += parts[len(parts) - 1]	
+		}
 	}()
 
 	return linesCh
