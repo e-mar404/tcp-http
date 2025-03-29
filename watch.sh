@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+watchexec -c -e go go test ./...
