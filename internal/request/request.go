@@ -1,14 +1,23 @@
 package request
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"regexp"
 	"strings"
 )
 
+type State int
+
+const (
+	Initialized State = iota + 1
+	Done
+)
+
 type Request struct {
 	RequestLine RequestLine
+	State       State
 }
 
 type RequestLine struct {
@@ -18,28 +27,95 @@ type RequestLine struct {
 }
 
 const crlf = "\r\n"
+const bufSize = 8
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	rawBytes, err := io.ReadAll(reader)
-	if err != nil {
-		fmt.Printf("error reading from reader: %s\n", err)
-		return nil, err
+	buf := make([]byte, bufSize)
+	requestBuffer := make([]byte, bufSize)
+	readToIndex := 0
+	r := &Request{
+		State: Initialized,
 	}
 
-	requestLine, err := parseRequestLine(rawBytes)
-	if err != nil {
-		return nil, err
+	for r.State != Done {
+		bytesRead, err := reader.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("finished reading")
+				r.State = Done
+
+				break
+			}
+
+			return nil, fmt.Errorf("error reading to buffer: %s", err)
+		}
+
+		if readToIndex+bytesRead >= len(requestBuffer) {
+			temp := make([]byte, len(requestBuffer)*2)
+			copy(temp, requestBuffer[:readToIndex])
+			requestBuffer = temp
+		}
+		readToIndex += bytesRead
+
+		copy(requestBuffer[readToIndex-bytesRead:readToIndex], buf[:bytesRead])
+
+		bytesParsed, err := r.parse(requestBuffer)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing buf: %s", err)
+		}
+		
+		remainingBytes := readToIndex - bytesParsed
+		if bytesParsed > 0 {
+			newBuf := make([]byte, bufSize)
+			copy(newBuf[:remainingBytes], requestBuffer[bytesRead:])
+			requestBuffer = newBuf
+		}
+		readToIndex = remainingBytes
 	}
 
-	return &Request{
-		RequestLine: *requestLine,
-	}, nil
+	return r, nil
 }
 
-func parseRequestLine(data []byte) (*RequestLine, error) {
-	parts := strings.Split(string(data), crlf)
+func (r *Request) parse(data []byte) (int, error) {
+	if r.State == Done {
+		return 0, fmt.Errorf("trying to parse data that is done")
+	}
 
-	requestLineParts := strings.Split(parts[0], " ")
+	if r.State == Initialized {
+		requestLine, n, err := parseRequestLine(data)
+		if err != nil {
+			return 0, err
+		}
+
+		if n == 0 {
+			return 0, nil
+		}
+
+		r.RequestLine = *requestLine
+		r.State = Done
+		return n, nil
+	}
+
+	return 0, fmt.Errorf("state is undefined")
+}
+
+func parseRequestLine(data []byte) (*RequestLine, int, error) {
+	idx := bytes.Index(data, []byte(crlf))
+	if idx == -1 {
+		return &RequestLine{}, 0, nil
+	}
+
+	requestLineText := string(data[:idx])
+	requestLine, err := requestLineFromString(requestLineText)
+	if err != nil {
+		return nil, 0, fmt.Errorf("error getting request line from text: %v\n", err)
+	}
+
+	return requestLine, idx + 2, nil 
+}
+
+func requestLineFromString(data string) (*RequestLine, error) {
+	requestLineParts := strings.Split(data, " ")
 
 	if len(requestLineParts) != 3 {
 		return nil, fmt.Errorf("Expecting 3 parts to the Request Line, got %v", len(requestLineParts))
@@ -56,14 +132,14 @@ func parseRequestLine(data []byte) (*RequestLine, error) {
 			return nil, fmt.Errorf("Request Line Malformed")
 		}
 	}
-	
+
 	method := requestLineParts[0]
 	target := requestLineParts[1]
 	versionParts := strings.Split(requestLineParts[2], "/")
 
 	return &RequestLine{
-		Method: method, 
-		RequestTarget: target,	
-		HttpVersion: versionParts[1],	
+		Method:        method,
+		RequestTarget: target,
+		HttpVersion:   versionParts[1],
 	}, nil
 }
