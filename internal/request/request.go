@@ -33,16 +33,16 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	buf := make([]byte, bufSize)
 	requestBuffer := make([]byte, bufSize)
 	readToIndex := 0
-	r := &Request{
+	req := &Request{
 		State: Initialized,
 	}
 
-	for r.State != Done {
+	for req.State != Done {
 		bytesRead, err := reader.Read(buf)
 		if err != nil {
 			if err == io.EOF {
 				fmt.Println("finished reading")
-				r.State = Done
+				req.State = Done
 
 				break
 			}
@@ -59,7 +59,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		copy(requestBuffer[readToIndex-bytesRead:readToIndex], buf[:bytesRead])
 
-		bytesParsed, err := r.parse(requestBuffer)
+		bytesParsed, err := req.parse(requestBuffer)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing buf: %s", err)
 		}
@@ -73,7 +73,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		readToIndex = remainingBytes
 	}
 
-	return r, nil
+	return req, nil
 }
 
 func (r *Request) parse(data []byte) (int, error) {
