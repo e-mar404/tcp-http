@@ -39,6 +39,16 @@ func TestHeaderParsing(t *testing.T) {
 	assert.Equal(t, 25, n)
 	assert.False(t, done)
 
+	// Valid: Repeating headers
+	headers = map[string]string{"set-person": "lane-loves-go"} 
+	data = []byte("Set-Person: prime-loves-zig\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "lane-loves-go, prime-loves-zig", headers["set-person"])
+	assert.Equal(t, n, 29)
+	assert.False(t, done)
+
 	// Valid: done
 	headers = NewHeaders()
 	data = []byte("\r\n a bunch of other stuff")

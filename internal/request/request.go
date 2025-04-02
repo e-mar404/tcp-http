@@ -2,6 +2,7 @@ package request
 
 import (
 	"bytes"
+	"e-mar404/httpfromtcp/internal/headers"
 	"fmt"
 	"io"
 	"regexp"
@@ -18,6 +19,7 @@ const (
 type Request struct {
 	RequestLine RequestLine
 	State       State
+	Headers     headers.Headers
 }
 
 type RequestLine struct {
@@ -63,7 +65,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error parsing buf: %s", err)
 		}
-		
+
 		remainingBytes := readToIndex - bytesParsed
 		if bytesParsed > 0 {
 			newBuf := make([]byte, bufSize)
@@ -111,7 +113,7 @@ func parseRequestLine(data []byte) (*RequestLine, int, error) {
 		return nil, 0, fmt.Errorf("error getting request line from text: %v\n", err)
 	}
 
-	return requestLine, idx + 2, nil 
+	return requestLine, idx + 2, nil
 }
 
 func requestLineFromString(data string) (*RequestLine, error) {
