@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-	"unicode"
 )
 
 type Headers map[string]string
@@ -16,28 +15,29 @@ func NewHeaders() Headers {
 const crlf = "\r\n"
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
-	bytesRead := 0
-	sepIdx := bytes.Index(data, []byte(":"))
-	if sepIdx == -1 {
-		return 0, false, fmt.Errorf("Malformed header, no `:` separating field key and field value")	
-	}
-
-	if !unicode.IsLetter(rune(data[sepIdx - 1])) {
-		return 0, false, fmt.Errorf("Malformed header, there should be no space between the field key and `:`")
-	}
-
-	fieldName := strings.TrimLeft(string(data[:sepIdx]), " ")
-	bytesRead += len(fieldName)
-
-	crlfIdx := bytes.Index(data[sepIdx+1:], []byte(crlf))
+	crlfIdx := bytes.Index(data, []byte(crlf))
 	if crlfIdx == -1 {
 		return 0, false, nil
 	}
+	
+	if crlfIdx == 0 {
+		return len(crlf), true, nil
+	}
 
-	fieldValue := strings.Trim(string(data[sepIdx+1:sepIdx+1+crlfIdx]), " ")
-	bytesRead = bytesRead + len(fieldValue)
+	parts := bytes.SplitN(data[:crlfIdx], []byte(":"), 2)
+	fieldName := string(parts[0])
+	if fieldName != strings.TrimRight(fieldName, " ") {
+		return 0, false, fmt.Errorf("Malformed header, there should be no space between the field key and `:`")
+	}
 
-	h[fieldName] = fieldValue
+	fieldName = strings.TrimSpace(fieldName)
+	fieldValue := strings.TrimSpace(string(parts[1]))
 
-	return bytesRead + 4, false, nil 
+	h.Set(fieldName, fieldValue)
+
+	return crlfIdx + len(crlf), false, nil 
+}
+
+func (h Headers) Set(key, value string) {
+	h[key] = value
 }
